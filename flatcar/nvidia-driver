@@ -135,11 +135,11 @@ cd /usr/src/nvidia-*/kernel
 export IGNORE_CC_MISMATCH=1
 export IGNORE_MISSING_MODULE_SYMVERS=1
 make -s -j ${MAX_THREADS} SYSSRC=/lib/modules/${KERNEL_VERSION}/source nv-linux.o nv-modeset-linux.o
-HEREDOC    
+EOF
     mkdir -p /lib/modules/${KERNEL_VERSION}
     cp -r /mnt/coreos/lib/modules/${KERNEL_VERSION}/* /lib/modules/${KERNEL_VERSION}/
     depmod "${KERNEL_VERSION}"
-
+    
     _cleanup_development_env
 )
 
