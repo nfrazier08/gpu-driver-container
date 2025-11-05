@@ -103,6 +103,7 @@ _install_prerequisites() (
     echo "Installing the Flatcar kernel sources into the development environment..."
 
     cat <<'EOF' | chroot /mnt/coreos /bin/bash
+set -ex
 KERNEL_VERSION=$(cat /usr/src/linux/include/config/kernel.release || ls /lib/modules)
 KERNEL_STRING=$(echo "${KERNEL_VERSION}" | cut -d "-" -f1)
 echo "Installing kernel sources for kernel version ${KERNEL_VERSION}..."
@@ -123,7 +124,7 @@ emerge -gKq coreos-sources \
 rm -f /usr/src/linux
 ln -s /usr/src/linux-${KERNEL_STRING}-coreos /usr/src/linux
 cp /lib/modules/${KERNEL_VERSION}/build/.config /usr/src/linux
-make -C /usr/src/linux modules_prepare > /dev/null
+make -C /usr/src/linux modules_prepare
 cp /lib/modules/${KERNEL_VERSION}/build/Module.symvers /usr/src/linux/
 depmod ${KERNEL_VERSION}
 mkdir -p /usr/src/linux/proc
@@ -134,7 +135,7 @@ cp /lib/modules/${KERNEL_VERSION}/build/scripts/module.lds /usr/src/nvidia-*/ker
 cd /usr/src/nvidia-*/kernel
 export IGNORE_CC_MISMATCH=1
 export IGNORE_MISSING_MODULE_SYMVERS=1
-make -j ${MAX_THREADS} SYSSRC=/lib/modules/${KERNEL_VERSION}/source nv-linux.o nv-modeset-linux.o 2>&1
+make -j ${MAX_THREADS} SYSSRC=/lib/modules/${KERNEL_VERSION}/source nv-linux.o nv-modeset-linux.o
 EOF
     mkdir -p /lib/modules/${KERNEL_VERSION}
     cp -r /mnt/coreos/lib/modules/${KERNEL_VERSION}/* /lib/modules/${KERNEL_VERSION}/
