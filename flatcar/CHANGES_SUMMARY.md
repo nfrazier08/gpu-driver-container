@@ -9,11 +9,13 @@ The NVIDIA GPU driver container failed to build on Flatcar Linux with kernel 6.6
 Failed to read kernel interface 'nv-linux.o'
 ```
 
-## Root Cause
-The kernel `modules_prepare` step was running interactively and prompting for configuration options (specifically for compressed debug information). This caused the build script to hang, as subsequent commands were being fed into the interactive prompt instead of executing.
+## Root Causes
+1. **Interactive Kernel Configuration**: The kernel `modules_prepare` step was running interactively and prompting for configuration options (specifically for compressed debug information). This caused the build script to hang, as subsequent commands were being fed into the interactive prompt instead of executing.
+
+2. **Missing nvidia-drm Module**: The `nvidia-drm.ko` kernel module was not included in the precompiled driver package, causing module loading failures even after successful compilation.
 
 ## Solution Overview
-Three main changes were made to `/flatcar/nvidia-driver`:
+Five main changes were made to `/flatcar/nvidia-driver`:
 
 ### 1. Added Non-Interactive Kernel Configuration (Line 127)
 **Change**: Added `make olddefconfig` before `make modules_prepare`
@@ -63,7 +65,24 @@ modprobe -d ${NVIDIA_KMODS_DIR} -a nvidia nvidia-uvm nvidia-modeset nvidia-drm
 
 **Why**: The `nvidia-drm` module is required to create the `/dev/dri` directory and device nodes, which are needed for Direct Rendering Infrastructure (DRI) support.
 
-### 4. Added nvidia-drm Module Unloading (Lines 260-263)
+### 4. Added nvidia-drm.ko to Precompiled Package (Lines 210-212)
+**Change**: Added `nvidia-drm.ko` to the mkprecompiled packaging command
+
+**Before**: Only packaged `nvidia.ko`, `nvidia-modeset.ko`, and `nvidia-uvm.ko`
+
+**After**:
+```bash
+--kernel-module nvidia-uvm.ko                                \
+${nvidia_uvm_sign_args}                                      \
+--target-directory .                                         \
+--kernel-module nvidia-drm.ko                                \
+${nvidia_drm_sign_args}                                      \
+--target-directory .
+```
+
+**Why**: The `nvidia-drm` kernel module must be included in the precompiled package so it can be installed during `init` mode. Without this, the module would not be available for loading.
+
+### 5. Added nvidia-drm Module Unloading (Lines 260-263)
 **Change**: Added proper unloading of `nvidia-drm` module
 
 **Before**: Only unloaded `nvidia-modeset`, `nvidia-uvm`, and `nvidia`
@@ -125,14 +144,17 @@ ls -la /dev/dri/
 
 ## Git Commit Message Suggestion
 ```
-Fix Flatcar 6.6.95 kernel build - add non-interactive config
+Fix Flatcar 6.6.95 kernel build and nvidia-drm support
 
 - Add 'make olddefconfig' to handle new kernel config options automatically
 - Remove invalid 'nvidia-drm.o' build target
+- Add nvidia-drm.ko to precompiled package
 - Add nvidia-drm module loading for /dev/dri support
 - Add proper nvidia-drm cleanup in unload function
 
 This fixes the build hanging issue on newer Flatcar kernels where
-modules_prepare would prompt for configuration options interactively.
+modules_prepare would prompt for configuration options interactively,
+and ensures nvidia-drm module is properly packaged and loaded for
+Direct Rendering Infrastructure (DRI) support.
 ```
 

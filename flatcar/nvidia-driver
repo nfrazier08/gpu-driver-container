@@ -206,6 +206,9 @@ _create_driver_package() (
                                         --target-directory .                                         \
                                         --kernel-module nvidia-uvm.ko                                \
                                         ${nvidia_uvm_sign_args}                                      \
+                                        --target-directory .                                         \
+                                        --kernel-module nvidia-drm.ko                                \
+                                        ${nvidia_drm_sign_args}                                      \
                                         --target-directory .
     # Archive the module files, so we can re-link later
     # The archive is created one per kernel version, including the package created above
