@@ -232,6 +232,11 @@ _create_driver_package() (
 # Load the kernel modules and start persistenced.
 _load_driver() {
     echo "Loading NVIDIA driver kernel modules..."
+    # Load kernel DRM modules first (required by nvidia-drm)
+    modprobe drm
+    modprobe drm_kms_helper
+    
+    # Now load NVIDIA modules
     modprobe -d ${NVIDIA_KMODS_DIR} -a nvidia nvidia-uvm nvidia-modeset nvidia-drm
 
     echo "Starting NVIDIA persistence daemon..."
