@@ -13,6 +13,7 @@ USE_HOST_MOFED="${USE_HOST_MOFED:-false}"
 NVIDIA_MODULE_PARAMS=()
 NVIDIA_UVM_MODULE_PARAMS=()
 NVIDIA_MODESET_MODULE_PARAMS=()
+NVIDIA_DRM_MODULE_PARAMS=()
 NVIDIA_PEERMEM_MODULE_PARAMS=()
 TARGETARCH=${TARGETARCH:?"Missing TARGETARCH env"}
 
@@ -126,6 +127,7 @@ _create_driver_package() (
     local nvidia_sign_args=""
     local nvidia_modeset_sign_args=""
     local nvidia_uvm_sign_args=""
+    local nvidia_drm_sign_args=""
 
     trap "make -s -j ${MAX_THREADS} SYSSRC=/lib/modules/${KERNEL_VERSION}/build clean > /dev/null" EXIT
 
@@ -160,10 +162,12 @@ _create_driver_package() (
         donkey get ${PRIVATE_KEY} sh -c "PATH=${PATH}:/usr/src/linux-headers-${KERNEL_VERSION}/scripts && \
           sign-file sha512 \$DONKEY_FILE pubkey.x509 nvidia.ko nvidia.ko.sign &&                          \
           sign-file sha512 \$DONKEY_FILE pubkey.x509 nvidia-modeset.ko nvidia-modeset.ko.sign &&          \
-          sign-file sha512 \$DONKEY_FILE pubkey.x509 nvidia-uvm.ko"
+          sign-file sha512 \$DONKEY_FILE pubkey.x509 nvidia-uvm.ko &&                                     \
+          sign-file sha512 \$DONKEY_FILE pubkey.x509 nvidia-drm.ko"
         nvidia_sign_args="--linked-module nvidia.ko --signed-module nvidia.ko.sign"
         nvidia_modeset_sign_args="--linked-module nvidia-modeset.ko --signed-module nvidia-modeset.ko.sign"
         nvidia_uvm_sign_args="--signed"
+        nvidia_drm_sign_args="--signed"
     fi
 
     echo "Building NVIDIA driver package ${pkg_name}..."
@@ -182,6 +186,9 @@ _create_driver_package() (
                                         --target-directory .                                         \
                                         --kernel-module nvidia-uvm.ko                                \
                                         ${nvidia_uvm_sign_args}                                      \
+                                        --target-directory .                                         \
+                                        --kernel-module nvidia-drm.ko                                \
+                                        ${nvidia_drm_sign_args}                                      \
                                         --target-directory .
     mkdir -p precompiled
     mv ${pkg_name} precompiled
@@ -252,6 +259,13 @@ _get_module_params() {
        done <"${base_path}/nvidia-modeset.conf"
        echo "Module parameters provided for nvidia-modeset: ${NVIDIA_MODESET_MODULE_PARAMS[@]}"
     fi
+    # nvidia-drm
+    if [ -f "${base_path}/nvidia-drm.conf" ]; then
+       while IFS="" read -r param || [ -n "$param" ]; do
+           NVIDIA_DRM_MODULE_PARAMS+=("$param")
+       done <"${base_path}/nvidia-drm.conf"
+       echo "Module parameters provided for nvidia-drm: ${NVIDIA_DRM_MODULE_PARAMS[@]}"
+    fi
     # nvidia-peermem
     if [ -f "${base_path}/nvidia-peermem.conf" ]; then
        while IFS="" read -r param || [ -n "$param" ]; do
@@ -288,11 +302,16 @@ _load_driver() {
     echo "Loading ipmi and i2c_core kernel modules..."
     modprobe -a i2c_core ipmi_msghandler ipmi_devintf
 
+    echo "Loading kernel DRM modules..."
+    modprobe drm
+    modprobe drm_kms_helper
+
     echo "Loading NVIDIA driver kernel modules..."
     set -o xtrace +o nounset
     modprobe nvidia "${NVIDIA_MODULE_PARAMS[@]}"
     modprobe nvidia-uvm "${NVIDIA_UVM_MODULE_PARAMS[@]}"
     modprobe nvidia-modeset "${NVIDIA_MODESET_MODULE_PARAMS[@]}"
+    modprobe nvidia-drm "${NVIDIA_DRM_MODULE_PARAMS[@]}"
     set +o xtrace -o nounset
 
     if _gpu_direct_rdma_enabled; then
@@ -384,6 +403,10 @@ _unload_driver() {
     fi
 
     echo "Unloading NVIDIA driver kernel modules..."
+    if [ -f /sys/module/nvidia_drm/refcnt ]; then
+        rmmod_args+=("nvidia-drm")
+        ((++nvidia_deps))
+    fi
     if [ -f /sys/module/nvidia_modeset/refcnt ]; then
         nvidia_modeset_refs=$(< /sys/module/nvidia_modeset/refcnt)
         rmmod_args+=("nvidia-modeset")
