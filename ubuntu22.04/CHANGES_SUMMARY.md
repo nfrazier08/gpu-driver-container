@@ -213,6 +213,63 @@ After applying these changes, Direct Rendering Infrastructure (DRI) support shou
 - Use appropriate restart policies to ensure the driver loads automatically after system reboot
 - Module signing support is included for secure boot environments
 
+## AWS EC2 Specific Requirements
+
+### Critical: `linux-modules-extra-aws` Package Required
+
+**On AWS EC2 instances running Ubuntu 22.04, you MUST install the `linux-modules-extra-aws` package for `nvidia-drm` to load successfully.**
+
+#### Why This is Required
+
+AWS optimizes their kernel packages by splitting modules into separate packages. The base `linux-aws` kernel package does **not** include the kernel DRM infrastructure modules (`drm`, `drm_kms_helper`) that `nvidia-drm` depends on. These are provided separately in the `linux-modules-extra-aws` package.
+
+Without this package, `nvidia-drm` will fail to load with errors like:
+```
+modprobe: FATAL: Module nvidia-drm not found in directory /lib/modules/6.8.0-1040-aws
+```
+
+Or if the module compiles but can't resolve symbols:
+```
+nvidia_drm: Unknown symbol drm_kms_helper_poll_fini (err -2)
+nvidia_drm: Unknown symbol drm_atomic_helper_* (err -2)
+```
+
+#### Installation
+
+On your AWS EC2 instance, install the package **before** running the driver container:
+
+```bash
+# Install linux-modules-extra for your current kernel
+sudo apt update
+sudo apt install -y linux-modules-extra-$(uname -r)
+
+# Verify the DRM modules are now available
+ls -la /lib/modules/$(uname -r)/kernel/drivers/gpu/drm/
+```
+
+#### Verification
+
+After installing `linux-modules-extra-aws` and running the driver container, verify DRI support:
+
+```bash
+# Check nvidia-drm is loaded
+lsmod | grep nvidia_drm
+
+# Verify DRI devices exist
+ls -la /dev/dri/
+# Expected output should include: card1, renderD128
+
+# Check kernel messages confirm nvidia-drm loaded
+dmesg | grep nvidia-drm
+# Expected: "[drm] [nvidia-drm] [GPU ID ...] Loading driver"
+# Expected: "[drm] Initialized nvidia-drm 0.0.0 ..."
+```
+
+#### Reference
+
+This requirement was identified and documented in the AWS re:Post community:
+- [NVIDIA driver installation fails on EC2 with "Unable to load the kernel module 'nvidia-drm.ko'"](https://repost.aws/questions/QUuROp7An5RTeXAklEThgz1A/nvidia-driver-installation-fails-on-ec2-g6f-xlarge-ubuntu-with-unable-to-load-the-kernel-module-nvidia-drm-ko)
+
 ## Related Changes
 This implementation mirrors the DRI support added to flatcar. See `/flatcar/CHANGES_SUMMARY.md` for the original implementation details and rationale.
 
