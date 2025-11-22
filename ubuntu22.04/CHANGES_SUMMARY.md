@@ -10,7 +10,7 @@ The NVIDIA GPU driver container needed to support Direct Rendering Infrastructur
 Enable Direct Rendering Infrastructure (DRI) support by loading the `nvidia-drm` kernel module, which creates the `/dev/dri` directory and device nodes (`/dev/dri/card0`, `/dev/dri/renderD128`) required for GPU rendering and compute workloads.
 
 ## Solution Overview
-Eight main changes were made to `/ubuntu22.04/nvidia-driver`, following the pattern established for flatcar and completing the nvidia-drm module parameter support:
+Nine main changes were made to `/ubuntu22.04/nvidia-driver`, following the pattern established for flatcar and completing the nvidia-drm module parameter support:
 
 ### 1. Initialize nvidia_drm_sign_args Variable (Line 129)
 **Change**: Added initialization for nvidia-drm signing support
@@ -152,6 +152,21 @@ modprobe nvidia-drm "${NVIDIA_DRM_MODULE_PARAMS[@]}"
 ```
 
 **Why**: Applies any user-configured parameters from the `NVIDIA_DRM_MODULE_PARAMS` array when loading the module. This completes the parameter handling chain and ensures nvidia-drm can be configured just like the other NVIDIA kernel modules. Common use cases include setting `modeset=1` for display output support.
+
+### 9. Remove --no-drm Flag from nvidia-installer (Line 457)
+**Change**: Removed the `--no-drm` flag to allow nvidia-drm module installation
+
+**Before**:
+```bash
+nvidia-installer --kernel-module-only --no-drm --ui=none --no-nouveau-check -m=${KERNEL_TYPE}
+```
+
+**After**:
+```bash
+nvidia-installer --kernel-module-only --ui=none --no-nouveau-check -m=${KERNEL_TYPE}
+```
+
+**Why**: The `--no-drm` flag explicitly prevents the nvidia-drm kernel module from being installed, even when it's successfully built. This flag was blocking DRI/DRM functionality. Removing it allows nvidia-drm.ko to be installed and loaded, enabling the creation of `/dev/dri` devices. Note: On AWS kernels without vmlinux, BTF generation will be skipped with a warning, but the module will still install and function correctly.
 
 ## Files Modified
 - `/ubuntu22.04/nvidia-driver` - Main driver installation script
